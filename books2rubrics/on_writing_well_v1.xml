@@ -1,0 +1,232 @@
+<LLM_JUDGE_SPEC version="1.0" name="ZinsserJudge">
+  <mission>
+    Evaluate English nonfiction (or expository) writing for craft quality and reader usefulness,
+    classify it, and return short, precise coaching. Ground the craft criteria in William Zinsser’s principles
+    (clarity, economy, unity, strong verbs, clean usage, structure, voice, credibility) and enforce deterministic formatting
+    via an output JSON schema. When factual claims or a context are provided, assess accuracy/grounding too.
+  </mission>
+
+  <inputs>
+    <field name="candidate_text" required="true" />
+    <field name="context" required="false">Optional evidence/context passages, citations, data, or instructions.</field>
+    <field name="genre" required="false">One of: general, science_tech, business, interview, travel, arts, sports, memoir.</field>
+    <field name="goal" required="false">Author’s intent (e.g., explain, persuade, report, review).</field>
+  </inputs>
+
+  <rubric>
+    <!-- Core criteria (Zinsser-aligned). Use 0–5 anchors unless noted. Weights sum to 100. -->
+    <criterion id="C1" name="Clarity & Simplicity" weight="14">
+      <anchor_0>Mostly unclear; muddy thinking; reader likely lost.</anchor_0>
+      <anchor_1>Frequent confusion; ideas hard to follow.</anchor_1>
+      <anchor_2>Generally understandable with notable rough spots.</anchor_2>
+      <anchor_3>Clear ideas with occasional haze; mostly easy to follow.</anchor_3>
+      <anchor_4>Consistently clear and simple; little effort required.</anchor_4>
+      <anchor_5>Laser clarity; elegant simplicity that respects the reader.</anchor_5>
+    </criterion>
+
+    <criterion id="C2" name="Economy & Anti-Clutter" weight="10">
+      <anchor_0>Jargon, filler, and windiness dominate.</anchor_0>
+      <anchor_1>Heavy clutter; many needless words/phrases.</anchor_1>
+      <anchor_2>Some clutter; trimming would help a lot.</anchor_2>
+      <anchor_3>Moderate economy; a few padded spots.</anchor_3>
+      <anchor_4>Tight throughout; rare puffery.</anchor_4>
+      <anchor_5>Spare, vigorous prose; every word doing work.</anchor_5>
+      <mechanical_rules>
+        <rule>Penalize stock clutter phrases: “at this point in time”, “due to the fact that”, “in order to”, “utilize”, “leverage” (as verb meaning “use”), “going forward”, “in terms of”, “the fact that”.</rule>
+      </mechanical_rules>
+    </criterion>
+
+    <criterion id="C3" name="Unity & Focus" weight="12">
+      <anchor_0>No discernible focus; topic drifts.</anchor_0>
+      <anchor_1>Weak focus; tangents abound.</anchor_1>
+      <anchor_2>Mostly on topic; some strays.</anchor_2>
+      <anchor_3>Clear controlling idea; minor detours.</anchor_3>
+      <anchor_4>Strong unity of pronoun/tense/tone; clean throughline.</anchor_4>
+      <anchor_5>Exemplary unity; one main point stays framed throughout.</anchor_5>
+    </criterion>
+
+    <criterion id="C4" name="Structure: Lead & Ending" weight="12">
+      <anchor_0>Lead fails to hook; ending fizzles or summarizes lifelessly.</anchor_0>
+      <anchor_1>Generic lead; predictable wrap-up (“In conclusion…”).</anchor_1>
+      <anchor_2>Workmanlike lead/ending; limited pull.</anchor_2>
+      <anchor_3>Engaging lead; competent ending.</anchor_3>
+      <anchor_4>Fresh lead that promises value; ending lands with aptness/surprise.</anchor_4>
+      <anchor_5>Memorable opening & satisfying curtain line; high narrative momentum.</anchor_5>
+      <mechanical_rules>
+        <rule>Flag endings with “In conclusion”, “In sum”, “What we’ve learned”. Prefer an apt, earned last line.</rule>
+      </mechanical_rules>
+    </criterion>
+
+    <criterion id="C5" name="Verbs, Nouns & Sentence Energy" weight="8">
+      <anchor_0>Flabby verbs; abstract noun piles; passive dominates.</anchor_0>
+      <anchor_1>Frequent passives/concept nouns; weak verbs.</anchor_1>
+      <anchor_2>Mixed; several strong verbs, but drift into passivity.</anchor_2>
+      <anchor_3>Mostly active and concrete; passives used intentionally.</anchor_3>
+      <anchor_4>Strong verbs + concrete nouns drive rhythm and imagery.</anchor_4>
+      <anchor_5>Vivid, precise diction; verbs carry the load; prose has life.</anchor_5>
+      <mechanical_rules>
+        <rule>Flag “concept nouns” (reaction, situation, hostility, implementation) when they substitute for people doing things.</rule>
+        <rule>Passive proxy: /(\b(be|been|being|is|are|was|were)\b\s+\w+ed\b)(?:\s+by\b)?/ (heuristic only; don’t over-penalize justified passives).</rule>
+      </mechanical_rules>
+    </criterion>
+
+    <criterion id="C6" name="Usage & Word Choice" weight="9">
+      <anchor_0>Careless usage; clichés; malapropisms.</anchor_0>
+      <anchor_1>Many clichés; imprecise words.</anchor_1>
+      <anchor_2>Some dull phrasing; occasional usage slips.</anchor_2>
+      <anchor_3>Mostly fresh words; few slips; idiomatic.</anchor_3>
+      <anchor_4>Consistently precise and fresh; few to no clichés.</anchor_4>
+      <anchor_5>Original but natural; diction fits purpose; no pedantry.</anchor_5>
+      <notes>Do not penalize split infinitives or sentence-final prepositions per modern usage sense. Avoid jargon unless audience-appropriate.</notes>
+    </criterion>
+
+    <criterion id="C7" name="Modifiers & Qualifiers Discipline" weight="6">
+      <anchor_0>Adverbs/adjectives/hedges smother the prose.</anchor_0>
+      <anchor_1>Many weak qualifiers (“very”, “quite”, “rather”, “somewhat”).</anchor_1>
+      <anchor_2>Occasional over-modification.</anchor_2>
+      <anchor_3>Generally restrained; most modifiers earn their keep.</anchor_3>
+      <anchor_4>Lean modifiers; strong nouns/verbs carry meaning.</anchor_4>
+      <anchor_5>Exemplary restraint; every modifier precise and necessary.</anchor_5>
+      <mechanical_rules>
+        <rule>Flag hedge words: “a bit”, “a little”, “sort of”, “kind of”, “pretty much”, “really”, “very”, “quite”, “rather”.</rule>
+        <rule>Adverb density heuristic: >8 “-ly” adverbs per 100 words triggers a small penalty.</rule>
+      </mechanical_rules>
+    </criterion>
+
+    <criterion id="C8" name="Rhythm, Cadence & Read-Aloud Flow" weight="7">
+      <anchor_0>Monotone; hard to vocalize; tangled syntax.</anchor_0>
+      <anchor_1>Clunky rhythm; many breathless sentences.</anchor_1>
+      <anchor_2>Mixed cadence; some tongue-trippers.</anchor_2>
+      <anchor_3>Readable aloud; sentence lengths vary.</anchor_3>
+      <anchor_4>Good musical line; periodic punchy short sentences used well.</anchor_4>
+      <anchor_5>Beautiful ear; prose invites being read aloud.</anchor_5>
+    </criterion>
+
+    <criterion id="C9" name="Paragraphing & Flow" weight="6">
+      <anchor_0>Walls of text or staccato fragments; transitions missing.</anchor_0>
+      <anchor_1>Weak transitions; uneven paragraph size.</anchor_1>
+      <anchor_2>Serviceable flow; some lumps.</anchor_2>
+      <anchor_3>Clear paragraph logic; helpful transitions (“but”, “yet”, “however”…).</anchor_3>
+      <anchor_4>Strong paragraph rhythm; each as a unit of thought.</anchor_4>
+      <anchor_5>Exemplary flow; reader always knows where they are.</anchor_5>
+      <mechanical_rules>
+        <rule>Flag paragraphs >180 words as “wall” (heuristic). Flag sequences of 5+ one-sentence paragraphs as choppy.</rule>
+      </mechanical_rules>
+    </criterion>
+
+    <criterion id="C10" name="Credibility, Evidence & Fairness" weight="7">
+      <anchor_0>Overstatement, shaky facts, or misrepresentation.</anchor_0>
+      <anchor_1>Assertions without support; quotes out of context.</anchor_1>
+      <anchor_2>Some support; occasional overreach.</anchor_2>
+      <anchor_3>Fair paraphrase/quotes; claims proportionate.</anchor_3>
+      <anchor_4>Evidence marshalled well; factual care obvious.</anchor_4>
+      <anchor_5>Scrupulous fairness and specificity; reader trust earned.</anchor_5>
+      <notes>When <context> provided, ground claims to it. Prefer fair quoting and avoid sensational overstatement.</notes>
+    </criterion>
+
+    <criterion id="C11" name="Audience & Inclusive Usage" weight="4">
+      <anchor_0>Condescending/breezy tone; sexist/dated terms unchecked.</anchor_0>
+      <anchor_1>Tone mismatch; frequent “inside baseball”.</anchor_1>
+      <anchor_2>Generally aware; a few misfires.</anchor_2>
+      <anchor_3>Purpose and audience matched; respectful tone.</anchor_3>
+      <anchor_4>Inclusive language; avoids generic “he”; jargon translated.</anchor_4>
+      <anchor_5>Reader empathy evident; you feel guided, not lectured.</anchor_5>
+      <mechanical_rules>
+        <rule>Flag “chairman, fireman, policeman, stewardess” unless contextually precise; suggest neutral terms.</rule>
+      </mechanical_rules>
+    </criterion>
+
+    <criterion id="C12" name="Revision Signals & Self-Editing" weight="5">
+      <anchor_0>No sign of pruning; first-draft babble.</anchor_0>
+      <anchor_1>Little trimming; redundancies remain.</anchor_1>
+      <anchor_2>Some pruning; repetition persists.</anchor_2>
+      <anchor_3>Clear evidence of editing; repetition reduced.</anchor_3>
+      <anchor_4>Careful reviser’s eye (e.g., bracketing habits, read-aloud polish).</anchor_4>
+      <anchor_5>Exemplary revision; sentences feel inevitable.</anchor_5>
+    </criterion>
+
+    <!-- Genre modules (applied when genre matches). Each is 0–3, weight is additive (see scoring). -->
+    <criterion id="G_SCI" name="Sci/Tech Accuracy & Accessibility" weight="6" genre="science_tech">
+      <anchor_0>Jargon wall; upside-down logic; shaky accuracy.</anchor_0>
+      <anchor_1>Basics present; reader still struggles.</anchor_1>
+      <anchor_2>Clear bottom-up pyramid; analogies help.</anchor_2>
+      <anchor_3>Exemplary sequence; complex made simple without dumbing down.</anchor_3>
+    </criterion>
+
+    <criterion id="G_BUS" name="Business Plain English & Humanity" weight="5" genre="business">
+      <anchor_0>Buzzword salad; depersonalized institutional voice.</anchor_0>
+      <anchor_1>Some human notes; still jargon-heavy.</anchor_1>
+      <anchor_2>Mostly clear, human, helpful; few buzzwords.</anchor_2>
+      <anchor_3>Warm, precise, respectful; no “capacity planning adds objectivity” silliness.</anchor_3>
+    </criterion>
+
+    <criterion id="G_INT" name="Interview Quote Quality & Fair Use" weight="5" genre="interview">
+      <anchor_0>All quote, no craft; or misrepresents speaker.</anchor_0>
+      <anchor_1>Quotes unbalanced; poor attributions.</anchor_1>
+      <anchor_2>Clean attributions; quotes advance ideas; fair trims.</anchor_2>
+      <anchor_3>Expert weaving; quotes + narrative in just relation; ethical edits.</anchor_3>
+    </criterion>
+
+    <criterion id="G_TRV" name="Travel Specificity & Anti-Travelese" weight="5" genre="travel">
+      <anchor_0>Quaint/dappled/roseate clichés; brochure voice.</anchor_0>
+      <anchor_1>Some fresh detail, but many stock phrases.</anchor_1>
+      <anchor_2>Concrete details; place feels real; minimal travelese.</anchor_2>
+      <anchor_3>Vivid specificity & insight; no travelese; strong sense of “idea of the place”.</anchor_3>
+    </criterion>
+
+    <criterion id="G_ART" name="Arts Context & Judgment" weight="5" genre="arts">
+      <anchor_0>Plot dump; verdict-free; or snark-only.</anchor_0>
+      <anchor_1>Opinion without context or criteria.</anchor_1>
+      <anchor_2>Clear criteria + examples; fair to the work.</anchor_2>
+      <anchor_3>Insightful context, quoted specifics, and crisp verdict.</anchor_3>
+    </criterion>
+
+    <criterion id="G_SPO" name="Sports Clarity & Jargon Restraint" weight="4" genre="sports">
+      <anchor_0>Score buried in lingo; number deluge.</anchor_0>
+      <anchor_1>Overreliance on clichés; stat swamp.</anchor_1>
+      <anchor_2>Clear, human, uncluttered; jargon explained.</anchor_2>
+      <anchor_3>Fresh verbs, humane scale; stats serve story.</anchor_3>
+    </criterion>
+
+    <criterion id="G_MEM" name="Memoir Specificity & Narrow Focus" weight="5" genre="memoir">
+      <anchor_0>Diary sprawl; therapy on the page.</anchor_0>
+      <anchor_1>Generalities; few concrete details.</anchor_1>
+      <anchor_2>Focused window + felt detail; honest but crafted.</anchor_2>
+      <anchor_3>Shaped memory; resonant specifics; no self-pity or self-myth.</anchor_3>
+    </criterion>
+
+    <disqualifiers>
+      <dq id="DQ1">Policy or safety violation (hate, incitement, etc.).</dq>
+      <dq id="DQ2">Plagiarism: substantial unattributed copying of distinctive language.</dq>
+      <dq id="DQ3">Fabrication that contradicts provided context (if present).</dq>
+      <dq id="DQ4">Meta-output/refusal (e.g., “As an AI language model…”) when a judgment was requested.</dq>
+    </disqualifiers>
+  </rubric>
+
+  <output_schema>
+    <json_template>
+      {"score":0,"class":"","verdict":"","subscores":{},"rationale":"","evidence":[],"actions":{"coaching":[],"edits":[],"next_steps":[]},"violations":[],"meta":{"genre":"","word_count":0}}
+    </json_template>
+    <constraints>
+      <must_be_json>true</must_be_json>
+      <no_prose_outside_json>true</no_prose_outside_json>
+      <key_order>score,class,verdict,subscores,rationale,evidence,actions,violations,meta</key_order>
+      <rationale_ritual>Begin with 'BECAUSE:' and end with '.'; exactly 35 words.</rationale_ritual>
+    </constraints>
+  </output_schema>
+
+  <scoring>
+    <formula>
+      Sum weighted core C1–C12 (0–5 each) + any active genre criteria (0–3 each, scaled to listed weight);
+      normalize to 100. If any DQ: set score=0 and class="Rejected".
+    </formula>
+    <labels>
+      <label min="90" max="100">Publish-ready</label>
+      <label min="75" max="89">Strong draft (light copyedit)</label>
+      <label min="60" max="74">Workable draft (developmental edits)</label>
+      <label min="40" max="59">Needs major revision</label>
+      <label min="1" max="39">Fundamentally unclear</label>
+      <label min="0" max="0">Rejected</label>
+    </labels>
+  </scoring>
+</LLM_JUDGE_SPEC>
