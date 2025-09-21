@@ -1,0 +1,143 @@
+<LLM_JUDGE_SPEC version="1.0" name="AntiLLMY" schema="1">
+  <mission>Score a passage for LLM-y speak (“slop”), using only the given text. Return a compact diagnosis plus concrete fixes.</mission>
+
+  <!-- ===== Regex library (mechanically checkable signs) ===== -->
+  <regex_library flags="i">
+    <!-- Tone / puffery / editorializing -->
+    <pattern id="puffery_words">\b(stunning|breathtaking|must[- ]?(see|visit)|rich (?:cultural )?heritage|enduring(?:\s+legacy)?|nestled|in the heart of|watershed moment|stands as|serves as|is a testament|plays a (?:vital|significant) role|continues to captivate|solidifies)\b</pattern>
+    <pattern id="editorialize">\b(it'?s (?:important|worth) (?:to note|noting)|no discussion would be complete|this (?:article|section) (?:wouldn'?t|would not) exist without)\b</pattern>
+    <pattern id="weasel">\b(some (?:critics|observers|commentators) (?:argue|say|believe)|many (?:believe|say)|industry (?:reports|analysts) (?:suggest|say))\b</pattern>
+    <pattern id="superficial_ing">\b(?:ensuring|highlighting|emphasizing|reflecting|underscoring)\b</pattern>
+
+    <!-- Formulaic scaffolding -->
+    <pattern id="conjunction_overuse">\b(on the other hand|moreover|in addition|furthermore|however)\b</pattern>
+    <pattern id="section_summaries">\b(in summary|in conclusion|overall)\b</pattern>
+    <pattern id="despite_challenges">\bdespite (?:its|these).+faces? .+challenges\b</pattern>
+    <pattern id="negative_parallelism">\bnot only\b|it'?s not (?:just|only)|\bno .+?, no .+?, just\b</pattern>
+    <pattern id="rule_of_three">\b\w+(?:ly)?[,，]\s+\w+(?:ly)?[,，]\s+(?:and\s+)?\w+(?:ly)?\b</pattern>
+
+    <!-- Meta-communication / AI tells -->
+    <pattern id="chatty_meta">\b(certainly!|of course!|i hope this helps|would you like|let me know|here'?s a|here is a|in this section we will|this draft|according to wikipedia|wikipedia (?:policies|guidelines))\b</pattern>
+    <pattern id="ai_disclaimer">\b(as an? (?:ai|large language) model|up to my last (?:training|knowledge) update|i cannot (?:browse|access)|i can(?:not|'t) directly)\b</pattern>
+    <pattern id="letter_form">\b(?:subject:|dear (?:wikipedia|editors|administrators))\b</pattern>
+
+    <!-- Markup / formatting artifacts -->
+    <pattern id="markdown_headings">(^|\n)#{1,6}\s+\S+</pattern>
+    <pattern id="list_bullets">(^|\n)\s*(?:•|–|-|\d+\.)\s+\S+</pattern>
+    <pattern id="emoji">[\u2190-\u21FF\u2300-\u27BF\u2B00-\u2BFF\u1F300-\u1FAFF]</pattern>
+    <pattern id="curly_quotes">[“”’]</pattern>
+    <pattern id="em_dash">—</pattern>
+    <pattern id="title_case_heading">(^|\n)[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,5}\s*\n</pattern>
+
+    <!-- Watermarks / artifacts unique to chatbots -->
+    <pattern id="oaicite">\boaicite\b|contentReference\[oaicite:\d+\]</pattern>
+    <pattern id="turn_tokens">\bturn\d+(?:search|image|view)\d+\b|[\uE000-\uF8FF]cite[\uE000-\uF8FF]turn\d+\w+\d+[\uE000-\uF8FF]</pattern>
+    <pattern id="utm_openai">\butm_source=(?:chatgpt\.com|openai)\b</pattern>
+    <pattern id="attr_json">\(\{"attribution":\{"attributableIndex":"\d+-\d+"\}\}\)</pattern>
+    <pattern id="footnote_arrow">↩</pattern>
+    <pattern id="placeholder_text">\[(?:URL of source|Insert [^]]+|Describe [^]]+)\]</pattern>
+
+    <!-- Citation / reference quirks -->
+    <pattern id="fake_ref_reuse"><ref name=.*?/>.*?<ref name=.*?></pattern>
+    <pattern id="named_ref_in_refs">(&lt;|<)references(>|&gt;).*(<|&lt;)ref name=.*?(>|&gt;)</pattern>
+
+    <!-- Knowledge-cutoff / speculation phrasing -->
+    <pattern id="cutoff_claim">\bas of (?:\w+\s+\d{4}|[A-Z][a-z]+ \d{4})\b.*?(?:not widely (?:available|documented)|limited information|based on available information)\b</pattern>
+  </regex_library>
+
+  <!-- ===== Rubric (anchored, observable, minimal) ===== -->
+  <rubric>
+    <!-- Each criterion scores 0–3, higher is cleaner (less LLM-y) -->
+    <criterion id="C1" name="Neutrality & Tone" weight="3">
+      <uses_patterns>puffery_words,editorialize,weasel,superficial_ing</uses_patterns>
+      <anchor_0>Pervasive puffery/editorializing (≥8 hits total) or any weasel claims paired with no attribution.</anchor_0>
+      <anchor_1>Multiple issues (4–7 hits) across the passage.</anchor_1>
+      <anchor_2>Minor traces (1–3 hits), largely factual tone.</anchor_2>
+      <anchor_3>No hits; neutral, concrete language.</anchor_3>
+    </criterion>
+
+    <criterion id="C2" name="Formulaic Scaffolding" weight="3">
+      <uses_patterns>conjunction_overuse,section_summaries,despite_challenges,negative_parallelism,rule_of_three</uses_patterns>
+      <anchor_0>Rigid outline tells (e.g., “Despite…faces challenges…Future…”) or ≥6 hits total.</anchor_0>
+      <anchor_1>3–5 hits; formula shows.</anchor_1>
+      <anchor_2>1–2 hits; mostly organic flow.</anchor_2>
+      <anchor_3>0 hits; no templatey scaffolding.</anchor_3>
+    </criterion>
+
+    <criterion id="C3" name="Meta-Communication & AI Tells" weight="3">
+      <uses_patterns>chatty_meta,ai_disclaimer,letter_form</uses_patterns>
+      <anchor_0>Any AI disclaimer (“As an AI…”) or letter-style opener.</anchor_0>
+      <anchor_1>Chatty meta phrases ≥3 or any “Would you like…”.</anchor_1>
+      <anchor_2>1–2 minor chatty phrases.</anchor_2>
+      <anchor_3>No meta-communication; impersonal prose.</anchor_3>
+    </criterion>
+
+    <criterion id="C4" name="Markup & Formatting Artifacts" weight="3">
+      <uses_patterns>markdown_headings,list_bullets,emoji,curly_quotes,em_dash,title_case_heading</uses_patterns>
+      <anchor_0>Cross-context markup (e.g., Markdown headings) or emojis present; or em dashes > 1 per 150 words.</anchor_0>
+      <anchor_1>Multiple artifacts (≥3 kinds) or heavy list-paste footprint.</anchor_1>
+      <anchor_2>1–2 light artifacts (e.g., occasional curly quotes).</anchor_2>
+      <anchor_3>No artifacts; consistent house style.</anchor_3>
+    </criterion>
+
+    <criterion id="C5" name="Watermarks & Citation Pathologies" weight="3">
+      <uses_patterns>oaicite,turn_tokens,utm_openai,attr_json,footnote_arrow,placeholder_text,fake_ref_reuse,named_ref_in_refs,cutoff_claim</uses_patterns>
+      <anchor_0>Any watermark token (turn…/oaicite/oai_citation/utm_source=openai/chatgpt) or placeholder text.</anchor_0>
+      <anchor_1>Other citation quirks (↩ footnotes, bogus reuse) ≥2 or a knowledge-cutoff disclaimer.</anchor_1>
+      <anchor_2>Single minor quirk only.</anchor_2>
+      <anchor_3>No artifacts or quirks.</anchor_3>
+    </criterion>
+
+    <disqualifiers>
+      <dq id="DQ1">Presence of explicit AI self-disclosure (ai_disclaimer) → auto-fail.</dq>
+      <dq id="DQ2">Presence of watermark tokens (turn_tokens|oaicite|utm_openai|attr_json) → auto-fail.</dq>
+      <dq id="DQ3">Placeholder scaffolding (placeholder_text) → auto-fail.</dq>
+    </disqualifiers>
+  </rubric>
+
+  <!-- ===== Output schema with rigid constraints (alignment principle) ===== -->
+  <output_schema>
+    <!-- Fixed key order; no extra keys; JSON only -->
+    <json_template>
+      {"score":0,"risk":0,"band":"","rationale":"","evidence":[],"violations":[],"criterion_scores":{"C1":0,"C2":0,"C3":0,"C4":0,"C5":0},"advice":""}
+    </json_template>
+    <constraints>
+      <must_be_json>true</must_be_json>
+      <no_prose_outside_json>true</no_prose_outside_json>
+      <fixed_key_order>score,risk,band,rationale,evidence,violations,criterion_scores,advice</fixed_key_order>
+      <rationale_style>Begin with 'BECAUSE:' and use exactly 35 words, end with a period.</rationale_style>
+      <advice_style>Begin with 'FIX:' and provide exactly 5 semicolon-separated imperatives (≤220 characters total), ending with a period.</advice_style>
+      <evidence_items>List up to 8 strings of the exact matched snippet(s) or pattern IDs.</evidence_items>
+      <violations_items>List DQ IDs if any; else []</violations_items>
+    </constraints>
+  </output_schema>
+
+  <!-- ===== Scoring (deterministic) ===== -->
+  <scoring>
+    <formula>
+      If any DQ fired ⇒ score=0, risk=15, band="FAIL".
+      Else: score = C1+C2+C3+C4+C5 (0–15, higher is cleaner).
+      risk = 15 - score (higher means more LLM-y).
+      band = (risk ≥12 → "Severe"; risk 8–11 → "High"; risk 4–7 → "Moderate"; risk 1–3 → "Low"; risk 0 → "Minimal").
+    </formula>
+  </scoring>
+
+  <!-- ===== Advice generator (maps triggers to concrete fixes) ===== -->
+  <advice_rules>
+    <rule when="puffery_words|editorialize">Replace hype with concrete facts; remove evaluatives.</rule>
+    <rule when="weasel">Attribute claims to named sources or delete vague attributions.</rule>
+    <rule when="conjunction_overuse|section_summaries|despite_challenges|negative_parallelism|rule_of_three">Cut templatey sentences; vary connectors; remove summary/conclusion boilerplate.</rule>
+    <rule when="chatty_meta|letter_form">Delete direct address and helper language; keep encyclopedic voice.</rule>
+    <rule when="ai_disclaimer">Remove AI self-disclosure and capability disclaimers.</rule>
+    <rule when="markdown_headings|list_bullets|title_case_heading">Convert headings/lists to house style; sentence-case headings.</rule>
+    <rule when="emoji|curly_quotes|em_dash">Remove emoji; normalize quotes/apostrophes; limit em dashes.</rule>
+    <rule when="oaicite|turn_tokens|utm_openai|attr_json|footnote_arrow|placeholder_text|fake_ref_reuse|named_ref_in_refs|cutoff_claim">Delete watermarks/placeholders; replace with real citations or omit.</rule>
+  </advice_rules>
+
+  <!-- ===== Triple validation (restate critical constraints) ===== -->
+  <validation>
+    <must>Output JSON only in the exact key order.</must>
+    <must>Rationale starts with 'BECAUSE:' and is exactly 35 words.</must>
+    <must>Advice starts with 'FIX:' and contains exactly 5 imperatives separated by semicolons, ending with a period.</must>
+  </validation>
+</LLM_JUDGE_SPEC>
